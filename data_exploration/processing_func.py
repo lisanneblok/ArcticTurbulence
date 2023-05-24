@@ -15,24 +15,66 @@ from tqdm import tqdm
 
 
 def check_coords(data):
+    """
+    Check the coordinate variables in the given data and add missing
+    coordinates if necessary.
+    Args:
+        data (xarray.DataArray or xarray.Dataset): Input data containing
+        variables.
+    Returns:
+        xarray.DataArray or xarray.Dataset: Data with updated coordinates.
+    """
+
+    # Check if latitude coordinate is present, add if missing
     if "latitude" not in data.coords:
         data = data.set_coords("latitude")
+    # Check if longitude coordinate is present, add if missing
     if "longitude" not in data.coords:
         data = data.set_coords("longitude")
+    # Check if time coordinate is present, add if missing
     if "time" not in data.coords:
         data = data.set_coords("time")
+    # Check if depth coordinate is present, add if missing
     if "depth" not in data.coords:
         data["depth"] = data.depth
+    # Return data with updated coordinates
     return data
 
 
 def TS_derivative(dataset):
+    """
+    Calculate the derivatives of temperature (dT/dz) and salinity (dS/dz) with
+    respect to depth in the given dataset.
+    Parameters:
+        dataset (xarray.Dataset): Input dataset containing temperature (T) and
+        salinity (S) variables.
+    Returns:
+        xarray.Dataset: Dataset with additional variables 'dTdz' and 'dSdz'
+        representing the derivatives.
+    Raises:
+        ValueError: If the required variables 'T' or 'S' are not present in the
+        dataset.
+    """
     dataset["dTdz"] = dataset.T.differentiate('depth')
     dataset['dSdz'] = dataset.S.differentiate('depth')
     return dataset
 
 
 def interpolate_pmid(dataset, variable):
+    """
+    Interpolate a variable along the 'depth' dimension to match the original
+    depth values in the given dataset.
+
+    Parameters:
+        dataset (xarray.Dataset): Input dataset containing the original
+            'depth' dimension.
+        variable (numpy.ndarray): Variable array with dimensions
+            (depth, profile).
+
+    Returns:
+        xarray.DataArray: Interpolated variable array with dimensions
+            ('depth', 'profile').
+    """
     original_depth = dataset.depth
     depth_old = np.arange(variable.shape[0])  # Depth values of the variable
 
@@ -50,6 +92,69 @@ def interpolate_pmid(dataset, variable):
     # Create a DataArray with explicit dimension names
     var_dataarray = xr.DataArray(var_interp, dims=('depth', 'profile'))
     return var_dataarray
+
+
+def Tu_label1(data_arr):
+    """
+    Apply labels to Turner angle values based on
+    https://www.teos-10.org/pubs/gsw/pdf/Turner_Rsubrho.pdf
+
+    Parameters:
+        data_arr (numpy.ndarray): Array of Turner angle values.
+
+    Returns:
+        numpy.ndarray: Array with labels assigned to Turner angle values.
+    """
+    # Define the conditions and labels
+    conditions = [
+        (data_arr >= -90) & (data_arr < -45),
+        (data_arr >= -45) & (data_arr < 45),
+        (data_arr >= 45) & (data_arr < 90),
+        (data_arr >= 90) & (data_arr < -90)
+    ]
+    labels = ['Diffusive Convection', 'Doubly stable', 'Salt fingering',
+              'Statically unstable']
+
+    # Apply the conditions and labels to create a new array with the labels
+    result = np.select(conditions, labels, default='NaN')
+
+    # Create a new DataArray with the label
+    labeled_arr = data_arr.copy()
+    labeled_arr.values = result
+
+    return labeled_arr
+
+
+def Tu_label(data_arr):
+    """
+    Apply labels to Turner angle values based on
+    https://www.teos-10.org/pubs/gsw/pdf/Turner_Rsubrho.pdf
+
+    Parameters:
+        data_arr (numpy.ndarray): Array of Turner angle values.
+
+    Returns:
+        numpy.ndarray: Array with labels assigned to Turner angle values.
+    """
+    # Define the conditions and labels
+    conditions = [
+        np.isnan(data_arr),
+        (data_arr >= -90) & (data_arr < -45),
+        (data_arr >= -45) & (data_arr < 45),
+        (data_arr >= 45) & (data_arr < 90),
+        (data_arr >= 90) & (data_arr < -90)
+    ]
+    labels = ['NaN', 'Diffusive Convection', 'Doubly stable',
+              'Salt fingering', 'Statically unstable']
+
+    # Apply the conditions and labels to create a new array with the labels
+    result = np.select(conditions, labels, default=0)
+
+    # Create a new DataArray with the label
+    labeled_arr = data_arr.copy()
+    labeled_arr.values = result
+
+    return labeled_arr
 
 
 def calc_N2_kappa(dataset):
@@ -76,7 +181,7 @@ def calc_N2_kappa(dataset):
         P = np.expand_dims(P, axis=1)
 
     # convert measured T to potential T, which is seen as temperature now
-    # potential temperature is the temperature a water parcel would have 
+    # potential temperature is the temperature a water parcel would have
     # if it were brought to the surface adiabatically (no pressure effects)
     dataset = dataset.rename({"T": "insituT"})
     dataset["T"] = gsw.conversions.pt_from_t(S, T, P, p_ref=0)
@@ -93,6 +198,8 @@ def calc_N2_kappa(dataset):
     dataset["Tu"] = interpolate_pmid(dataset, Tu)
     dataset["Rsubrho"] = interpolate_pmid(dataset, Rsubrho)
 
+    dataset["Tu_label"] = Tu_label(dataset.Tu)
+
     # Calculate N^2 using gsw_Nsquared
     # https://teos-10.org/pubs/gsw/html/gsw_Nsquared.html
     [N2, p_mid] = gsw.Nsquared(SA=dataset["SA"], CT=dataset["CT"], p=P,
@@ -107,12 +214,28 @@ def calc_N2_kappa(dataset):
 
     dataset["log_N2"] = np.log10(dataset.N2)
     dataset["log_kappa"] = np.log10(dataset.kappa)
+    dataset["log_eps"] = np.log10(dataset.eps)
 
     dataset = TS_derivative(dataset)
     return dataset
 
 
 def calc_hab(data, bathy_ds):
+    """
+    Calculate the height above bottom (hab) based on the bathymetry dataset
+    and the depth value in the dataset.
+
+    Parameters:
+        data (xarray.Dataset): Input dataset containing variables 'longitude',
+            'latitude', 'profile', 'depth'.
+        bathy_ds (xarray.Dataset): Bathymetry dataset with variables
+            'elevation', 'lon', 'lat'.
+
+    Returns:
+        xarray.Dataset: Updated dataset with added variables 'bathymetry' and
+        'hab'.
+
+    """
     bathy_interp = bathy_ds.interp_like(data, method='nearest')
     n_depths = data.profile.shape[0]
     depth = np.zeros(n_depths)
@@ -121,9 +244,9 @@ def calc_hab(data, bathy_ds):
         microlon = data.longitude[i].values.flatten()
         microlat = data.latitude[i].values.flatten()
         depth[i] = bathy_interp.elevation.sel(lon=microlon, lat=microlat,
-                                              method ='nearest')
+                                              method='nearest')
     data['bathymetry'] = data.profile.copy(data=depth)
-    
+
     data["hab"] = data.bathymetry + abs(data.depth)
     # Set positive depth values to zero
     data["hab"] = data["hab"].where(data["hab"] <= 0, 0)
@@ -131,6 +254,22 @@ def calc_hab(data, bathy_ds):
 
 
 def arctic_calchab(data, bathy_ds):
+    """
+    Calculate the height above bottom (hab) based on the bathymetry dataset
+    and the depth value in the dataset. Specifically for the arctic mix, which
+    has a different dimension shapes.
+
+    Parameters:
+        data (xarray.Dataset): Input dataset containing variables 'longitude',
+            'latitude', 'profile', 'depth'.
+        bathy_ds (xarray.Dataset): Bathymetry dataset with variables
+            'elevation', 'lon', 'lat'.
+
+    Returns:
+        xarray.Dataset: Updated dataset with added variables 'bathymetry' and
+        'hab'.
+
+    """
     # group data by the 'profile' dimension
     profile_groups = data.groupby('profile')
 
