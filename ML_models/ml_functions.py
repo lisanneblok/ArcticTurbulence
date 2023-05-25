@@ -18,6 +18,7 @@ from tqdm import tqdm
 import cartopy.crs as ccrs
 import math
 from sklearn.preprocessing import LabelEncoder
+import xgboost as xgb
 
 warnings.filterwarnings('ignore')
 plt.rcParams['figure.figsize'] = (10, 10)
@@ -64,6 +65,7 @@ def encode_tulabel(data):
     numeric_labels = label_encoder.transform(data['Tu_label'])
     # Replace the Tu_label column with the numeric labels
     data['Tu_label'] = numeric_labels
+    return data
 
 
 def plot_importances(
@@ -135,9 +137,13 @@ def RF_regressor(dataframe, xfeatures, yfeatures):
     # Fit the pipeline on the training data
     pipeline.fit(X_train, y_train)
 
+    return pipeline, y_test, X_test
+    #return r2_score, rfr, y_pred, y_test, X_test, importances, pipeline
+
+def later(X_test):
     # Predict the test set labels
     y_pred = pipeline.predict(X_test)
-    r2_score(y_test, y_pred)
+    r2_score = r2_score(y_test, y_pred)
 
     # investigate importance of features
     importances = rfr.feature_importances_
@@ -150,6 +156,48 @@ def RF_regressor(dataframe, xfeatures, yfeatures):
         feature_name = feature_names[index]
         print(f"Feature #{i+1}: {feature_name} ({importances[index]})")
 
-    fig, (ax_imp, ax_conf) = plt.subplots(1, 1, figsize=[22, 10])
-    plot_importances(feature_names, importances, ax=ax_imp)
+
+def XGBoost_regressor(dataframe, xfeatures, yfeatures):
+    if "Tu_label" in xfeatures:
+        hallo = Tu_label(dataframe.Tu)
+        dataframe["Tu_label"] = hallo
+
+        dataframe = encode_tulabel(dataframe)
+
+    if 'log_eps' not in dataframe.columns:
+        dataframe['log_eps'] = dataframe['eps'].apply(lambda x: math.log(x))
+
+    # Stop depth at 300m
+    dataframe = dataframe[dataframe["depth"] <= 300]
+
+    x = dataframe[xfeatures].values
+    y = dataframe[yfeatures].values
+
+    # Split into train and test sets
+    SEED = 42
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=SEED)
+
+    # Define the XGBoost regressor
+    xgb_regressor = xgb.XGBRegressor(random_state=SEED)
+
+    # Fit the regressor on the training data
+    xgb_regressor.fit(X_train, y_train)
+
+    # Predict on the test set
+    y_pred = xgb_regressor.predict(X_test)
+
+    # Calculate R2 score
+    r2 = r2_score(y_test, y_pred)
+
+    # Plot feature importances
+    feature_importances = xgb_regressor.feature_importances_
+    sorted_indices = feature_importances.argsort()
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(range(len(feature_importances)), feature_importances[sorted_indices], align='center')
+    plt.yticks(range(len(feature_importances)), [xfeatures[i] for i in sorted_indices])
+    plt.xlabel('Feature Importance')
+    plt.ylabel('Feature')
+    plt.title('XGBoost Feature Importances')
     plt.show()
+    return xgb_regressor, r2, y_test, y_pred, X_test, feature_importances
