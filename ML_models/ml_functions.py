@@ -247,3 +247,85 @@ def XGBoost_regressor1m(dataframe, xfeatures, yfeatures):
     plt.title('XGBoost Feature Importances')
     plt.show()
     return xgb_regressor, r2, y_test, y_pred, X_test, feature_importances
+
+
+def XGBoost_regressor_tuned(dataframe, xfeatures, yfeatures):
+    if "Tu_label" in xfeatures:
+        hallo = Tu_label(dataframe.Tu)
+        dataframe["Tu_label"] = hallo
+        dataframe = encode_tulabel(dataframe)
+
+    if 'log_eps' not in dataframe.columns:
+        dataframe['log_eps'] = dataframe['eps'].apply(lambda x: math.log(x))
+
+    # Stop depth at 300m
+    dataframe = dataframe[dataframe["depth"] <= 300]
+
+    x = dataframe[xfeatures].values
+    y = dataframe[yfeatures].values
+
+    # Split into train and test sets
+    SEED = 42
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=SEED)
+
+    # Define the XGBoost regressor with best parameters
+    xgb_regressor = xgb.XGBRegressor(learning_rate=0.1, max_depth=7, n_estimators=300, random_state=SEED)
+
+    # Perform k-fold cross-validation
+    cv = KFold(n_splits=5, shuffle=True, random_state=SEED)
+
+    # Create a pipeline with preprocessing steps and XGBoost regressor
+    pipeline = Pipeline([
+        ('scaler', MinMaxScaler()),
+        ('regressor', xgb_regressor)
+    ])
+
+    # Fit the pipeline on the training data using cross-validation
+    pipeline.fit(X_train, y_train)
+
+    # Predict on the test set
+    y_pred = pipeline.predict(X_test)
+
+    # Calculate R2 score
+    r2 = r2_score(y_test, y_pred)
+
+    # Plot learning curves
+    train_scores = []
+    val_scores = []
+
+    for train_index, val_index in cv.split(X_train):
+        X_train_fold, X_val_fold = X_train[train_index], X_train[val_index]
+        y_train_fold, y_val_fold = y_train[train_index], y_train[val_index]
+
+        # Fit the pipeline on the training fold
+        pipeline.fit(X_train_fold, y_train_fold)
+
+        # Calculate R2 scores for training and validation folds
+        train_score = r2_score(y_train_fold, pipeline.predict(X_train_fold))
+        val_score = r2_score(y_val_fold, pipeline.predict(X_val_fold))
+
+        train_scores.append(train_score)
+        val_scores.append(val_score)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, len(train_scores) + 1), train_scores, label='Training')
+    plt.plot(range(1, len(val_scores) + 1), val_scores, label='Validation')
+    plt.xlabel('Number of Folds')
+    plt.ylabel('R2 Score')
+    plt.title('Learning Curves')
+    plt.legend()
+    plt.show()
+
+    # Plot feature importances
+    feature_importances = xgb_regressor.feature_importances_
+    sorted_indices = feature_importances.argsort()
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(range(len(feature_importances)), feature_importances[sorted_indices], align='center')
+    plt.yticks(range(len(feature_importances)), [xfeatures[i] for i in sorted_indices])
+    plt.xlabel('Feature Importance')
+    plt.ylabel('Feature')
+    plt.title('XGBoost Feature Importances')
+    plt.show()
+
+    return pipeline, r2, y_test, y_pred, X_test, feature_importances

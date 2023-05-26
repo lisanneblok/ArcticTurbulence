@@ -58,7 +58,8 @@ def calc_correlation(merged_df):
 
 
 def plot_correlations(merged_df):
-    merged_df["absolute_residuals"] = np.abs(merged_df["log_eps"] - merged_df["eps_pred"])
+    merged_df["absolute_residuals"] = np.abs(
+        merged_df["log_eps"] - merged_df["eps_pred"])
 
     # Scatter plot of Absolute Residuals vs. Depth
     plt.scatter(merged_df['depth'], merged_df['absolute_residuals'])
@@ -67,7 +68,7 @@ def plot_correlations(merged_df):
     plt.title('Absolute Residuals vs. Depth')
     plt.show()
 
-    #Scatter plot of Absolute Residuals vs. Latitude
+    # Scatter plot of Absolute Residuals vs. Latitude
     plt.scatter(merged_df['latitude'], merged_df['absolute_residuals'])
     plt.xlabel('Latitude')
     plt.ylabel('Absolute Residuals')
