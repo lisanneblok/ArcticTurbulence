@@ -94,4 +94,36 @@ def plot_historgram(dataframe):
     plt.title("Histograms of Latitude per Cruise")
     plt.legend(title="Cruise", labels=dataframe["cruise"].unique(), loc="upper left")
     plt.show()
-    
+
+
+def stereo_plot(merged_df, variable, name_var, vmin=False, vmax=False):
+    import cartopy.crs as ccrs
+
+    # Create a polar stereographic projection centered on the Arctic pole
+    projection = ccrs.NorthPolarStereo(central_longitude=0)
+
+    # Create a figure and axes using the polar stereographic projection
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'projection': projection})
+
+    # Plot longitude and latitude with colored residuals
+    if isinstance(vmin, int):
+        sc = ax.scatter(merged_df['longitude'], merged_df['latitude'], c=np.abs(variable), vmin=vmin, vmax=vmax, cmap='viridis', transform=ccrs.PlateCarree())
+    else: 
+        sc = ax.scatter(merged_df['longitude'], merged_df['latitude'], c=np.abs(variable), cmap='viridis', transform=ccrs.PlateCarree())
+    # Add colorbar
+    cbar = plt.colorbar(sc, ax=ax, label=name_var)
+
+    # Set map extent to focus on the Arctic region
+    ax.set_extent([-180, 180, 60, 90], ccrs.PlateCarree())
+
+    # Add map features
+    ax.coastlines()
+    ax.gridlines()
+
+    # Set plot title and labels
+    plt.title(f"{name_var} based on Longitude and Latitude")
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+
+    # Show the plot
+    plt.show()
