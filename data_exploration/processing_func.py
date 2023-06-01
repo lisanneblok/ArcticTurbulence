@@ -12,6 +12,7 @@ import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from tqdm import tqdm
+from datetime import datetime
 
 
 def check_coords(data):
@@ -204,8 +205,8 @@ def calc_N2_kappa(dataset):
     # https://teos-10.org/pubs/gsw/html/gsw_Nsquared.html
     [N2, p_mid] = gsw.Nsquared(SA=dataset["SA"], CT=dataset["CT"], p=P,
                                lat=dataset["latitude"])
-    dataset["N2"] = interpolate_pmid(dataset, N2)
 
+    dataset["N2"] = interpolate_pmid(dataset, N2)
     # calculate kappa like in Mashayek et al, 2022
     # assume chi is 0.2 in standard turbulence regime
     dataset['kappa'] = 0.2*dataset.eps/dataset.N2
@@ -217,6 +218,144 @@ def calc_N2_kappa(dataset):
     dataset["log_eps"] = np.log10(dataset.eps)
 
     dataset = TS_derivative(dataset)
+    return dataset
+
+
+def calc_N2_kappa_sorted(dataset):
+    """N2 and kappa both independent of epsilon. 
+    Assume dataset is in profile, depth shape
+
+    Parameters
+    ----------
+    dataset : dataset
+        Microstructure dataset, where insitu temperature is named as "T" in
+        degrees Celcius.
+        Salinity is named as "S" in .., and depth is called "depth" in meters.
+    """
+    S = dataset.S
+    P = dataset.P
+    lon = dataset.longitude.squeeze()
+    lat = dataset.latitude.squeeze()
+    T = dataset.T
+    eps = dataset.eps
+    z = dataset.depth
+
+    # Add a dummy axis to pressure (P) to match the shape of other variables
+    if T.shape != P.shape:
+        # Project the lower-dimensional variable onto the target dimension
+        P = np.expand_dims(P, axis=-1)
+
+    # convert measured T to potential T, which is seen as temperature now
+    # potential temperature is the temperature a water parcel would have
+    # if it were brought to the surface adiabatically (no pressure effects)
+
+    # dataset = dataset.rename({"T": "insituT"})
+    # dataset["T"] = gsw.conversions.pt_from_t(S, T, P, p_ref=0)
+    # dataset['rho'] = gsw.rho(S, T, P)
+
+    dataset["SA"] = gsw.SA_from_SP(S, P, lon, lat)
+    # calculate conservative temeprature from absolute salinity and insitu-T
+    dataset["CT"] = gsw.CT_from_t(dataset.SA, T, P)
+
+    # The values of Turner Angle Tu and density ratio Rrho are calculated
+    # at mid-point pressures, p_mid.
+    # https://teos-10.org/pubs/gsw/html/gsw_Turner_Rsubrho.html
+    [Tu, Rsubrho, p_mid] = gsw.Turner_Rsubrho(dataset.SA, dataset.CT, P)
+    dataset["Tu"] = interpolate_pmid(dataset, Tu)
+    dataset["Rsubrho"] = interpolate_pmid(dataset, Rsubrho)
+    dataset["Tu_label"] = Tu_label(dataset.Tu)
+
+    CT_values = dataset["CT"].values
+    CT_sort = np.empty_like(CT_values) * np.nan
+
+    # Iterate over each profile
+    for i in range(dataset.profile.size):
+        # Get the CT values for the current profile
+        temp_CT = dataset.CT[:, i].values
+        # Sort the CT values in ascending order
+        sorted_CT = np.sort(temp_CT)
+        # Store the sorted CT values in the CT_sort array
+        CT_sort[:, i] = sorted_CT
+
+    # Use the sorted CT values in the gws.Nsquared function
+    N2, p_mid = gsw.Nsquared(SA=dataset.SA, CT=CT_sort, p=P, lat=dataset["latitude"])
+    dataset["N2_sort"] = interpolate_pmid(dataset, N2)
+
+    # Assume dataset is in profile, depth shape
+    # Nprof = dataset["latitude"].shape[0]
+    #for i in range(Nprof):
+      #  temp_CT = CT_values[:, i]
+      #  temp_SA = SA_values[:, i]
+      #  non_nan_mask = ~np.isnan(temp_CT)
+      #  sorted_indices = np.argsort(temp_CT[non_nan_mask])
+        # CT_sort[non_nan_mask, i] = temp_CT[non_nan_mask][sorted_indices]
+        # SA_sort[non_nan_mask, i] = temp_SA[non_nan_mask][sorted_indices]
+      #  CT_sort[non_nan_mask, i] = temp_CT[sorted_indices][non_nan_mask]
+      #  SA_sort[non_nan_mask, i] = temp_SA[sorted_indices][non_nan_mask]
+
+    # Calculate N^2 using gsw_Nsquared
+    # https://teos-10.org/pubs/gsw/html/gsw_Nsquared.html
+    #N2, p_mid = gsw.Nsquared(SA=SA_sort, CT=CT_sort, p=dataset["P"], lat=dataset["latitude"])
+    #dataset["N2_sort"] = interpolate_pmid(dataset, N2)
+
+    # calculate kappa like in Mashayek et al, 2022
+    # assume chi is 0.2 in standard turbulence regime
+    dataset['kappa'] = 0.2*dataset.eps/dataset.N2_sort
+    # assume mixing efficiency of 1 in double diffusion regime
+    dataset["kappa_AT"] = dataset.eps/dataset.N2_sort
+
+    dataset["log_N2"] = np.log10(dataset.N2_sort)
+    dataset["log_kappa"] = np.log10(dataset.kappa)
+    dataset["log_eps"] = np.log10(dataset.eps)
+
+    dataset = TS_derivative(dataset)
+    return dataset
+
+
+def calc_sic(dataset, Hadi_SI):
+    # Define start date of the dataset
+    base_date = datetime(1870, 1, 1)
+
+    # Round the longitude and latitude values to the nearest half degree
+    # This corresponds to the format and structure of Hadi_SI 
+    rounded_longitude = np.ceil(dataset['longitude'] * 2) / 2
+    rounded_latitude = np.ceil(dataset['latitude'] * 2) / 2
+
+    # Calculate the number of months between the base date and all target dates
+    # months_after_base = ((dataset["time"].dt.year - base_date.year) * 12 +
+    #                     (dataset["time"].dt.month - base_date.month))
+
+    dataset["nearest_lon"] = rounded_longitude
+    dataset["nearest_lat"] = rounded_latitude
+
+    # Convert the time, latitude, and longitude variables to arrays
+    time_values = dataset["time"].values
+    latitude_values = dataset["nearest_lat"].values
+    longitude_values = dataset["nearest_lon"].values
+
+    # Use the arrays of indices to retrieve the sic values from the dataset
+    sic_values = Hadi_SI.sel(time=time_values,
+                             latitude=latitude_values,
+                             longitude=longitude_values,
+                             method="nearest")["sic"]
+
+    # Create an empty array to store the sic scalar values
+    sic_scalar = np.empty(dataset["profile"].shape)
+
+    # Loop over each profile in dataset
+    for i, profile in enumerate(dataset["profile"]):
+        # Get the corresponding indices of time, latitude, and longitude
+        time_index = np.where(dataset["time"].values == time_values[i])[0][0]
+        lat_index = np.where(dataset["nearest_lat"].values ==
+                             latitude_values[i])[0][0]
+        lon_index = np.where(dataset["nearest_lon"].values ==
+                             longitude_values[i])[0][0]
+
+        # Extract the sic scalar value for the profile
+        sic_scalar[i] = sic_values[time_index, lat_index, lon_index]
+
+    # Assign the sic scalar values to a new variable in the mosaic_ds dataset
+    dataset["sea_ice_concentration"] = (("profile",), sic_scalar)
     return dataset
 
 
