@@ -122,8 +122,7 @@ def RF_regressor(dataframe, xfeatures, yfeatures):
 
     # Split into train and test sets
     SEED = 42
-    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2,
-                                                        random_state=SEED)
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=SEED)
 
     # Define the MinMaxScaler
     scaler = MinMaxScaler()
@@ -137,24 +136,9 @@ def RF_regressor(dataframe, xfeatures, yfeatures):
     # Fit the pipeline on the training data
     pipeline.fit(X_train, y_train)
 
-    return pipeline, y_test, X_test
-    #return r2_score, rfr, y_pred, y_test, X_test, importances, pipeline
-
-def later(X_test):
-    # Predict the test set labels
-    y_pred = pipeline.predict(X_test)
-    r2_score = r2_score(y_test, y_pred)
-
-    # investigate importance of features
+    # Obtain feature importances
     importances = rfr.feature_importances_
-    feature_names = xfeatures
-    # Sort feature importances in descending order
-    sorted_indices = np.argsort(importances)[::-1]
-
-    # Print feature importance rankings with feature names
-    for i, index in enumerate(sorted_indices):
-        feature_name = feature_names[index]
-        print(f"Feature #{i+1}: {feature_name} ({importances[index]})")
+    return pipeline, y_test, X_test, importances
 
 
 def XGBoost_regressor(dataframe, xfeatures, yfeatures):
