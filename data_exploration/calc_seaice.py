@@ -3,13 +3,7 @@ from netCDF4 import Dataset
 import xarray as xr
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-# gsw oceanic toolbox: http://www.teos-10.org/pubs/Getting_Started.pdf
-import gsw
-from scipy.io import loadmat
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import matplotlib.pyplot as plt
+
 import warnings
 import datetime as datetime
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -112,8 +106,8 @@ def calc_SIC(dataset, Hadi_SI):
 
     if nan_percentage > 10:
         # Call the function for interpolated sic values
-        dataset = calc_seaice(dataset, Hadi_SI, time_values, latitude_values,
-                              longitude_values)
+        dataset = calc_withnans(dataset, Hadi_SI, time_values, latitude_values,
+                                longitude_values)
         return dataset
 
     else:
@@ -145,8 +139,8 @@ def calc_SIC(dataset, Hadi_SI):
     return dataset
 
 
-def calc_seaice(dataset, Hadi_SI, time_values, latitude_values,
-                longitude_values):
+def calc_withnans(dataset, Hadi_SI, time_values, latitude_values,
+                  longitude_values):
     """
     Calculate sea ice concentration values with interpolated sic values.
 

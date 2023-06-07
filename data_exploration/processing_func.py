@@ -222,7 +222,7 @@ def calc_N2_kappa(dataset):
 
 
 def calc_N2_kappa_sorted(dataset):
-    """N2 and kappa both independent of epsilon. 
+    """N2 and kappa both independent of epsilon.
     Assume dataset is in profile, depth shape
 
     Parameters
@@ -278,25 +278,9 @@ def calc_N2_kappa_sorted(dataset):
         CT_sort[:, i] = sorted_CT
 
     # Use the sorted CT values in the gws.Nsquared function
-    N2, p_mid = gsw.Nsquared(SA=dataset.SA, CT=CT_sort, p=P, lat=dataset["latitude"])
+    N2, p_mid = gsw.Nsquared(SA=dataset.SA, CT=CT_sort, p=P,
+                             lat=dataset["latitude"])
     dataset["N2_sort"] = interpolate_pmid(dataset, N2)
-
-    # Assume dataset is in profile, depth shape
-    # Nprof = dataset["latitude"].shape[0]
-    #for i in range(Nprof):
-      #  temp_CT = CT_values[:, i]
-      #  temp_SA = SA_values[:, i]
-      #  non_nan_mask = ~np.isnan(temp_CT)
-      #  sorted_indices = np.argsort(temp_CT[non_nan_mask])
-        # CT_sort[non_nan_mask, i] = temp_CT[non_nan_mask][sorted_indices]
-        # SA_sort[non_nan_mask, i] = temp_SA[non_nan_mask][sorted_indices]
-      #  CT_sort[non_nan_mask, i] = temp_CT[sorted_indices][non_nan_mask]
-      #  SA_sort[non_nan_mask, i] = temp_SA[sorted_indices][non_nan_mask]
-
-    # Calculate N^2 using gsw_Nsquared
-    # https://teos-10.org/pubs/gsw/html/gsw_Nsquared.html
-    #N2, p_mid = gsw.Nsquared(SA=SA_sort, CT=CT_sort, p=dataset["P"], lat=dataset["latitude"])
-    #dataset["N2_sort"] = interpolate_pmid(dataset, N2)
 
     # calculate kappa like in Mashayek et al, 2022
     # assume chi is 0.2 in standard turbulence regime
@@ -309,53 +293,6 @@ def calc_N2_kappa_sorted(dataset):
     dataset["log_eps"] = np.log10(dataset.eps)
 
     dataset = TS_derivative(dataset)
-    return dataset
-
-
-def calc_sic(dataset, Hadi_SI):
-    # Define start date of the dataset
-    base_date = datetime(1870, 1, 1)
-
-    # Round the longitude and latitude values to the nearest half degree
-    # This corresponds to the format and structure of Hadi_SI 
-    rounded_longitude = np.ceil(dataset['longitude'] * 2) / 2
-    rounded_latitude = np.ceil(dataset['latitude'] * 2) / 2
-
-    # Calculate the number of months between the base date and all target dates
-    # months_after_base = ((dataset["time"].dt.year - base_date.year) * 12 +
-    #                     (dataset["time"].dt.month - base_date.month))
-
-    dataset["nearest_lon"] = rounded_longitude
-    dataset["nearest_lat"] = rounded_latitude
-
-    # Convert the time, latitude, and longitude variables to arrays
-    time_values = dataset["time"].values
-    latitude_values = dataset["nearest_lat"].values
-    longitude_values = dataset["nearest_lon"].values
-
-    # Use the arrays of indices to retrieve the sic values from the dataset
-    sic_values = Hadi_SI.sel(time=time_values,
-                             latitude=latitude_values,
-                             longitude=longitude_values,
-                             method="nearest")["sic"]
-
-    # Create an empty array to store the sic scalar values
-    sic_scalar = np.empty(dataset["profile"].shape)
-
-    # Loop over each profile in dataset
-    for i, profile in enumerate(dataset["profile"]):
-        # Get the corresponding indices of time, latitude, and longitude
-        time_index = np.where(dataset["time"].values == time_values[i])[0][0]
-        lat_index = np.where(dataset["nearest_lat"].values ==
-                             latitude_values[i])[0][0]
-        lon_index = np.where(dataset["nearest_lon"].values ==
-                             longitude_values[i])[0][0]
-
-        # Extract the sic scalar value for the profile
-        sic_scalar[i] = sic_values[time_index, lat_index, lon_index]
-
-    # Assign the sic scalar values to a new variable in the mosaic_ds dataset
-    dataset["sea_ice_concentration"] = (("profile",), sic_scalar)
     return dataset
 
 
@@ -432,3 +369,71 @@ def arctic_calchab(data, bathy_ds):
     # Set positive depth values to zero
     data["hab"] = data["hab"].where(data["hab"] <= 0, 0)
     return data
+
+
+def mld(dataset, outfile=None, save_mld=False):
+    """
+    out = mld(dataset, outfile, save_mld)
+
+    Reads:
+        dataset   :: xarray dataset containing rho, drhodz, and d2rhodz2
+        variables
+        outfile   :: output file to save the snapshot of the computed MLD
+        save_mld  :: if True, the computed MLD will be saved in the output file
+
+    Returns:
+        MLDI, MLDJ :: xarray DataArrays representing the MLD indices and values
+    """
+    dataset["rho"] = gsw.rho(dataset["S"], dataset["T"], 0)
+    dataset['drhodz'] = dataset.rho.differentiate('depth')
+    dataset['d2rhodz2'] = dataset.drhodz.differentiate('depth')
+
+    # Extract variables from the dataset
+    rho = dataset["rho"]
+    drhodz = dataset["drhodz"]
+    d2rhodz2 = dataset["d2rhodz2"]
+
+    # Extract dimensions from the dataset
+    depth_size, profile_size = rho.shape
+
+    MLDI = np.ones((profile_size,)) * np.nan
+    MLDJ = np.ones((profile_size,)) * np.nan
+
+    for profile_num in range(profile_size):
+        tmp = drhodz[:, profile_num, ]
+        tmp2 = d2rhodz2[:, profile_num]
+
+        if np.isnan(tmp).all():
+            continue
+
+        # Find the index of minimum stratification
+        I_min = np.nanargmin(tmp)
+        MLDI[profile_num] = I_min
+
+        if I_min > 2:
+            # Check for non-NaN values in the slice
+            valid_slice = tmp2[:I_min][~np.isnan(tmp2[:I_min])]
+            if len(valid_slice) > 0:
+                J = np.nanargmax(valid_slice)
+                I_min = min(I_min, J)
+
+        if tmp2[I_min] < 0. and (I_min > 4 and I_min == J):
+            MLDJ[profile_num] = 0
+        else:
+            MLDJ[profile_num] = I_min
+
+    if save_mld:
+        # Save the MLD
+        MLD_dataset = xr.Dataset({"MLDI": (("profile",), MLDI),
+                                  "MLDJ": (("profile",), MLDJ)})
+        MLD_dataset.to_netcdf(outfile)
+
+    MLDI = xr.DataArray(MLDI, dims=("profile",),
+                        coords={"profile": range(profile_size)})
+    MLDJ = xr.DataArray(MLDJ, dims=("profile",),
+                        coords={"profile": range(profile_size)})
+
+    dataset["MLDI"] = MLDI
+    dataset["MLDJ"] = MLDJ
+
+    return dataset
