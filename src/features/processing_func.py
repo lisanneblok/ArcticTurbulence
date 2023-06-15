@@ -285,13 +285,12 @@ def calc_N2_kappa_sorted(dataset):
     # calculate kappa like in Mashayek et al, 2022
     # assume chi is 0.2 in standard turbulence regime
     dataset['kappa'] = 0.2*dataset.eps/dataset.N2_sort
-    # assume mixing efficiency of 1 in double diffusion regime
-    dataset["kappa_AT"] = dataset.eps/dataset.N2_sort
 
     dataset["log_N2"] = np.log10(dataset.N2_sort)
     dataset["log_kappa"] = np.log10(dataset.kappa)
-    dataset["log_eps"] = np.log10(dataset.eps)
-
+    # Perform column check and calculation
+    if "log_eps" not in dataset:
+        dataset["log_eps"] = np.log10(dataset["eps"])
     dataset = TS_derivative(dataset)
     return dataset
 
@@ -316,7 +315,7 @@ def calc_hab(data, bathy_ds):
     n_depths = data.profile.shape[0]
     depth = np.zeros(n_depths)
 
-    for i in tqdm(range(n_depths)):
+    for i in (range(n_depths)):
         microlon = data.longitude[i].values.flatten()
         microlat = data.latitude[i].values.flatten()
         depth[i] = bathy_interp.elevation.sel(lon=microlon, lat=microlat,
@@ -355,7 +354,7 @@ def arctic_calchab(data, bathy_ds):
     profile = np.zeros(len(profile_groups))
 
     # loop over each group
-    for i, (_, profile_data) in tqdm(enumerate(profile_groups)):
+    for i, (_, profile_data) in (enumerate(profile_groups)):
         microlat = profile_data.latitude.values.flatten()[0]
         microlon = profile_data.longitude.values.flatten()[0]
         profile[i] = bathy_interp.elevation.sel(lon=microlon, lat=microlat,
@@ -420,7 +419,6 @@ def mld(dataset, outfile=False, save_mld=False, threshold=0.01):
             if len(valid_slice) > 0:
                 J = np.nanargmax(valid_slice)
                 min_strat = min(min_strat, J)
-
         if tmp2[min_strat] < 0. and (min_strat > 4 and min_strat == J):
             MLDJ[profile_num] = 0
         else:
