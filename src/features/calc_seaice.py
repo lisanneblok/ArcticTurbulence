@@ -132,7 +132,8 @@ def calc_SIC(dataset, Hadi_SI):
 
             except IndexError:
                 # Assign NaN to sic_scalar if any index results in an error
-                sic_scalar[i] = np.nan
+                # sic_scalar[i] = np.nan
+                sic_scalar[i] = 0
 
         # Assign the sic scalar values to a new variable in the dataset
         dataset["sea_ice_concentration"] = (("profile",), sic_scalar)

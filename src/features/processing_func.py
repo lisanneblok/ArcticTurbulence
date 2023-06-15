@@ -285,13 +285,12 @@ def calc_N2_kappa_sorted(dataset):
     # calculate kappa like in Mashayek et al, 2022
     # assume chi is 0.2 in standard turbulence regime
     dataset['kappa'] = 0.2*dataset.eps/dataset.N2_sort
-    # assume mixing efficiency of 1 in double diffusion regime
-    dataset["kappa_AT"] = dataset.eps/dataset.N2_sort
 
     dataset["log_N2"] = np.log10(dataset.N2_sort)
     dataset["log_kappa"] = np.log10(dataset.kappa)
-    dataset["log_eps"] = np.log10(dataset.eps)
-
+    # Perform column check and calculation
+    if "log_eps" not in dataset:
+        dataset["log_eps"] = np.log10(dataset["eps"])
     dataset = TS_derivative(dataset)
     return dataset
 
@@ -316,7 +315,7 @@ def calc_hab(data, bathy_ds):
     n_depths = data.profile.shape[0]
     depth = np.zeros(n_depths)
 
-    for i in tqdm(range(n_depths)):
+    for i in (range(n_depths)):
         microlon = data.longitude[i].values.flatten()
         microlat = data.latitude[i].values.flatten()
         depth[i] = bathy_interp.elevation.sel(lon=microlon, lat=microlat,
@@ -355,7 +354,7 @@ def arctic_calchab(data, bathy_ds):
     profile = np.zeros(len(profile_groups))
 
     # loop over each group
-    for i, (_, profile_data) in tqdm(enumerate(profile_groups)):
+    for i, (_, profile_data) in (enumerate(profile_groups)):
         microlat = profile_data.latitude.values.flatten()[0]
         microlon = profile_data.longitude.values.flatten()[0]
         profile[i] = bathy_interp.elevation.sel(lon=microlon, lat=microlat,
@@ -371,18 +370,22 @@ def arctic_calchab(data, bathy_ds):
     return data
 
 
-def mld(dataset, outfile=None, save_mld=False):
+def mld(dataset, outfile=False, save_mld=False, threshold=0.01):
     """
-    out = mld(dataset, outfile, save_mld)
+    out = mld(dataset, outfile, save_mld, threshold)
 
     Reads:
-        dataset   :: xarray dataset containing rho, drhodz, and d2rhodz2
-        variables
-        outfile   :: output file to save the snapshot of the computed MLD
-        save_mld  :: if True, the computed MLD will be saved in the output file
+        dataset    :: xarray dataset containing rho, drhodz, and d2rhodz2
+            variables
+        outfile    :: output file to save the snapshot of the computed MLD
+        save_mld   :: if True, the computed MLD will be saved in the output
+            file
+        threshold  :: threshold value for the potential density criterion
+            (default: 0.01)
 
     Returns:
-        MLDI, MLDJ :: xarray DataArrays representing the MLD indices and values
+        MLDI, MLDJ  :: xarray DataArrays representing the MLD indices and
+            values
     """
     dataset["rho"] = gsw.rho(dataset["S"], dataset["T"], 0)
     dataset['drhodz'] = dataset.rho.differentiate('depth')
@@ -400,27 +403,33 @@ def mld(dataset, outfile=None, save_mld=False):
     MLDJ = np.ones((profile_size,)) * np.nan
 
     for profile_num in range(profile_size):
-        tmp = drhodz[:, profile_num, ]
+        tmp = drhodz[:, profile_num]
         tmp2 = d2rhodz2[:, profile_num]
 
         if np.isnan(tmp).all():
             continue
 
         # Find the index of minimum stratification
-        I_min = np.nanargmin(tmp)
-        MLDI[profile_num] = I_min
+        min_strat = np.nanargmin(tmp)
+        MLDI[profile_num] = min_strat
 
-        if I_min > 2:
+        if min_strat > 2:
             # Check for non-NaN values in the slice
-            valid_slice = tmp2[:I_min][~np.isnan(tmp2[:I_min])]
+            valid_slice = tmp2[:min_strat][~np.isnan(tmp2[:min_strat])]
             if len(valid_slice) > 0:
                 J = np.nanargmax(valid_slice)
-                I_min = min(I_min, J)
-
-        if tmp2[I_min] < 0. and (I_min > 4 and I_min == J):
+                min_strat = min(min_strat, J)
+        if tmp2[min_strat] < 0. and (min_strat > 4 and min_strat == J):
             MLDJ[profile_num] = 0
         else:
-            MLDJ[profile_num] = I_min
+            # Use threshold-based approach if no clear minimum stratification
+            if np.nanmin(tmp) > threshold:
+                # Find the index where drhodz first exceeds the threshold
+                indices_above_threshold = np.where(tmp > threshold)[0]
+                if len(indices_above_threshold) > 0:
+                    min_strat = indices_above_threshold[0]
+
+            MLDJ[profile_num] = min_strat
 
     if save_mld:
         # Save the MLD
@@ -428,12 +437,17 @@ def mld(dataset, outfile=None, save_mld=False):
                                   "MLDJ": (("profile",), MLDJ)})
         MLD_dataset.to_netcdf(outfile)
 
-    MLDI = xr.DataArray(MLDI, dims=("profile",),
-                        coords={"profile": range(profile_size)})
-    MLDJ = xr.DataArray(MLDJ, dims=("profile",),
-                        coords={"profile": range(profile_size)})
+    # MLDI = xr.DataArray(MLDI, dims=("profile",),
+    # coords={"profile": range(profile_size)})
+    # MLDJ = xr.DataArray(MLDJ, dims=("profile",),
+    # coords={"profile": range(profile_size)})
 
-    dataset["MLDI"] = MLDI
-    dataset["MLDJ"] = MLDJ
+    # dataset["MLDI"] = MLDI
+    # dataset["MLDJ"] = MLDJ
 
+    MLD_dataset = xr.Dataset({"MLDI": (("profile",), MLDI),
+                              "MLDJ": (("profile",), MLDJ)})
+
+    # Combine MLD_dataset with the original dataset
+    dataset.update(MLD_dataset)
     return dataset
