@@ -19,53 +19,15 @@ import cartopy.crs as ccrs
 import math
 from sklearn.preprocessing import LabelEncoder
 import xgboost as xgb
+import sys
+
+sys.path.append('../..')
+from src.models.encode_features import Tu_label, encode_tulabel
 
 warnings.filterwarnings('ignore')
 plt.rcParams['figure.figsize'] = (10, 10)
 plt.rcParams.update({'font.size': 14})
-
-
-def Tu_label(data_series):
-    """
-    Apply labels to Turner angle values based on
-    https://www.teos-10.org/pubs/gsw/pdf/Turner_Rsubrho.pdf
-
-    Parameters:
-        data_series (pd.Series): Series of Turner angle values.
-
-    Returns:
-        pd.Series: Series with labels assigned to Turner angle values.
-    """
-    # Define the conditions and labels
-    conditions = [
-        data_series.isnull(),
-        (data_series >= -90) & (data_series < -45),
-        (data_series >= -45) & (data_series < 45),
-        (data_series >= 45) & (data_series < 90),
-        (data_series >= 90) & (data_series < -90)
-    ]
-    labels = ['NaN', 'Diffusive Convection', 'Doubly stable',
-              'Salt fingering', 'Statically unstable']
-
-    # Apply the conditions and labels to create a new series with the labels
-    result = np.select(conditions, labels, default=0)
-
-    # Create a new series with the labels
-    labeled_series = pd.Series(result, index=data_series.index)
-
-    return labeled_series
-
-
-def encode_tulabel(data):
-    # Create an instance of the LabelEncoder
-    label_encoder = LabelEncoder()
-    # Fit the encoder on the Tu_label column
-    label_encoder.fit(data['Tu_label'])
-    # Transform the Tu_label column into numeric representation
-    numeric_labels = label_encoder.transform(data['Tu_label'])
-    # Replace the Tu_label column with the numeric labels
-    data['Tu_label'] = numeric_labels
-    return data
+sys.path.append('../..')
 
 
 def plot_importances(
@@ -74,7 +36,17 @@ def plot_importances(
     num_params_to_show: int = None,
     ax=None
 ):
-    """Visualise feature importance"""
+    """Visualize feature importance.
+
+    Parameters:
+    - var_col_names (list): List of input variable column names.
+    - importances (list): List of feature importances corresponding to var_col_names.
+    - num_params_to_show (int, optional): Number of top most significant features to show. Default is None.
+    - ax (matplotlib.axes.Axes, optional): Axes object to plot on. If not provided, a new one will be created.
+
+    Returns:
+    - ax (matplotlib.axes.Axes): Axes object containing the feature importance plot.
+    """
     # initialise axes if necessary
     ax = ax or plt.gca()
 
@@ -142,6 +114,22 @@ def RF_regressor(dataframe, xfeatures, yfeatures):
 
 
 def XGBoost_regressor(dataframe, xfeatures, yfeatures):
+    """Perform Random Forest Regression on the given dataset.
+
+    The function applies random forest regression to predict the target variable specified by yfeatures
+    using the features specified by xfeatures.
+
+    Parameters:
+    - dataframe (pandas.DataFrame): The input dataset.
+    - xfeatures (list): List of column names representing the input features.
+    - yfeatures (list): List of column names representing the target variable.
+
+    Returns:
+    - pipeline (sklearn.pipeline.Pipeline): The trained pipeline containing the MinMaxScaler and RandomForestRegressor.
+    - y_test (pandas.Series): The true values of the target variable for the test dataset.
+    - X_test (pandas.DataFrame): The input features of the test dataset.
+    - importances (numpy.ndarray): The feature importances calculated by the RandomForestRegressor.
+    """
     if "Tu_label" in xfeatures:
         hallo = Tu_label(dataframe.Tu)
         dataframe["Tu_label"] = hallo
@@ -184,10 +172,28 @@ def XGBoost_regressor(dataframe, xfeatures, yfeatures):
     plt.ylabel('Feature')
     plt.title('XGBoost Feature Importances')
     plt.show()
-    return xgb_regressor, r2, y_test, y_pred, X_test, feature_importances
+    return xgb_regressor, r2, y_test, y_pred, X_test, feature_importances, X_train, y_train
 
 
 def XGBoost_regressor1m(dataframe, xfeatures, yfeatures):
+    """Perform XGBoost regression on the given dataset.
+
+    The function applies XGBoost regression to predict the target variable specified by yfeatures
+    using the features specified by xfeatures.
+
+    Parameters:
+    - dataframe (pandas.DataFrame): The input dataset.
+    - xfeatures (list): List of column names representing the input features.
+    - yfeatures (list): List of column names representing the target variable.
+
+    Returns:
+    - xgb_regressor (xgboost.sklearn.XGBRegressor): The trained XGBoost regressor.
+    - r2 (float): The R-squared score for the model's performance on the test set.
+    - y_test (numpy.ndarray): The true values of the target variable for the test dataset.
+    - y_pred (numpy.ndarray): The predicted values of the target variable for the test dataset.
+    - X_test (numpy.ndarray): The input features of the test dataset.
+    - feature_importances (numpy.ndarray): The feature importances calculated by the XGBoost regressor.
+    """
     if "Tu_label" in xfeatures:
         hallo = Tu_label(dataframe.Tu)
         dataframe["Tu_label"] = hallo
@@ -234,9 +240,29 @@ def XGBoost_regressor1m(dataframe, xfeatures, yfeatures):
 
 
 def XGBoost_regressor_tuned(dataframe, xfeatures, yfeatures):
+    """Perform fine-tuned XGBoost regression on the given dataset.
+
+    The function applies XGBoost regression with tuned parameters to predict the target variable specified by yfeatures
+    using the features specified by xfeatures.
+
+    Parameters:
+    - dataframe (pandas.DataFrame): The input dataset.
+    - xfeatures (list): List of column names representing the input features.
+    - yfeatures (list): List of column names representing the target variable.
+
+    Returns:
+    - pipeline (sklearn.pipeline.Pipeline): The trained pipeline containing preprocessing steps and the XGBoost regressor.
+    - r2 (float): The R-squared score for the model's performance on the test set.
+    - y_test (numpy.ndarray): The true values of the target variable for the test dataset.
+    - y_pred (numpy.ndarray): The predicted values of the target variable for the test dataset.
+    - X_test (numpy.ndarray): The input features of the test dataset.
+    - feature_importances (numpy.ndarray): The feature importances calculated by the XGBoost regressor.
+    - X_train (numpy.ndarray): The input features of the training dataset.
+    - y_train (numpy.ndarray): The true values of the target variable for the training dataset.
+    """
     if "Tu_label" in xfeatures:
-        hallo = Tu_label(dataframe.Tu)
-        dataframe["Tu_label"] = hallo
+        encoded_Tu = Tu_label(dataframe.Tu)
+        dataframe["Tu_label"] = encoded_Tu
         dataframe = encode_tulabel(dataframe)
 
     if 'log_eps' not in dataframe.columns:
@@ -311,5 +337,4 @@ def XGBoost_regressor_tuned(dataframe, xfeatures, yfeatures):
     plt.ylabel('Feature')
     plt.title('XGBoost Feature Importances')
     plt.show()
-
-    return pipeline, r2, y_test, y_pred, X_test, feature_importances
+    return pipeline, r2, y_test, y_pred, X_test, feature_importances, X_train, y_train
