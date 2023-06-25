@@ -36,6 +36,18 @@ def Tu_label(data_series):
 
 
 def encode_tulabel(data):
+    """
+    Encodes the values in the 'Tu_label' column of a pandas DataFrame
+    into numeric representations.
+
+    Args:
+        data (pandas.DataFrame): The input DataFrame containing a column
+        named 'Tu_label'.
+
+    Returns:
+        pandas.DataFrame: The modified DataFrame with the 'Tu_label' column
+        replaced by numeric labels.
+    """
     # Create an instance of the LabelEncoder
     label_encoder = LabelEncoder()
     # Fit the encoder on the Tu_label column
