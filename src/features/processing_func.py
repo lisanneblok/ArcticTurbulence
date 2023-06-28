@@ -257,6 +257,10 @@ def calc_N2_kappa_sorted(dataset):
     # calculate conservative temeprature from absolute salinity and insitu-T
     dataset["CT"] = gsw.CT_from_t(dataset.SA, T, P)
 
+    dataset["rho"] = gsw.rho(dataset["S"], dataset["T"], 0)
+    dataset['drhodz'] = dataset.rho.differentiate('depth')
+    dataset['d2rhodz2'] = dataset.drhodz.differentiate('depth')
+
     # The values of Turner Angle Tu and density ratio Rrho are calculated
     # at mid-point pressures, p_mid.
     # https://teos-10.org/pubs/gsw/html/gsw_Turner_Rsubrho.html
@@ -387,10 +391,6 @@ def mld(dataset, outfile=False, save_mld=False, threshold=0.01):
         MLDI, MLDJ  :: xarray DataArrays representing the MLD indices and
             values
     """
-    dataset["rho"] = gsw.rho(dataset["S"], dataset["T"], 0)
-    dataset['drhodz'] = dataset.rho.differentiate('depth')
-    dataset['d2rhodz2'] = dataset.drhodz.differentiate('depth')
-
     # Extract variables from the dataset
     rho = dataset["rho"]
     drhodz = dataset["drhodz"]

@@ -38,7 +38,7 @@ def calc_correlation(merged_df):
     """
     merged_df["absolute_residuals"] = np.abs(
         merged_df["log_eps"] - merged_df["eps_pred"])
-    absolute_residuals = merged_df["absolute_residuals"]
+    absolute_residuals = merged_df["absolute_residuals"].to_numpy()
     # Extract the relevant variables from merged_df
     depth = merged_df['depth']
     latitude = merged_df['latitude']
@@ -56,10 +56,7 @@ def calc_correlation(merged_df):
     latitude = latitude.reshape(-1, 1)
     longitude = longitude.reshape(-1, 1)
     tu_label = tu_label.reshape(-1, 1)
-
-    # Concatenate the variables and absolute residuals
-    data = np.concatenate((depth, latitude, longitude, tu_label,
-                           absolute_residuals), axis=1)
+    absolute_residuals = absolute_residuals.reshape(-1, 1)
 
     # Calculate correlation coefficients
     correlation_matrix = np.corrcoef(data, rowvar=False)
@@ -243,4 +240,43 @@ def confidence_metrics(y_test, y_pred, num_bootstraps=1000, alpha=0.05):
     plt.axvline(x=residual_std, color='r', linestyle='--')
     plt.title("Residual Standard Deviation")
     plt.tight_layout()
+    plt.show()
+
+
+def correlation_matrix(arctic_df, xstringlist):
+    """
+    Generates a correlation matrix heatmap for the specified columns
+    in the Arctic DataFrame.
+
+    Args:
+        arctic_df (pandas.DataFrame): The input DataFrame containing
+            the data.
+        xstringlist (list): A list of column names to include in the
+            correlation matrix.
+    """
+    # Calculate the correlation matrix
+    corr = arctic_df[xstringlist].corr()
+
+    # Set the color palette
+    cmap = sns.diverging_palette(220, 10, as_cmap=True)
+
+    # Create a figure and axes
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Create the heatmap with customized styling
+    sns.heatmap(corr, mask=np.zeros_like(corr, dtype=np.bool),
+                cmap=cmap, square=True, ax=ax,
+                annot=True, annot_kws={"fontsize": 12},
+                fmt=".2f", cbar=True, cbar_kws={"shrink": 0.8})
+
+    # Set the title
+    plt.title('Correlation Matrix', fontsize=16)
+
+    # Rotate x-axis labels if needed
+    plt.xticks(rotation=45, ha='right')
+
+    # Adjust the layout for better readability
+    plt.tight_layout()
+
+    # Show the plot
     plt.show()

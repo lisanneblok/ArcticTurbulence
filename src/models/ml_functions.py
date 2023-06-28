@@ -104,7 +104,7 @@ def RF_regressor(dataframe, xfeatures, yfeatures, cruise_test=False):
             of the training set.
 
     """
-    if "Tu_label" in xfeatures:
+    if "Tu_label" not in dataframe.columns:
         hallo = Tu_label(dataframe.Tu)
         dataframe["Tu_label"] = hallo
 
@@ -158,7 +158,7 @@ def RF_regressor(dataframe, xfeatures, yfeatures, cruise_test=False):
 
 
 def XGBoost_regressor(dataframe, xfeatures, yfeatures, cv=False,
-                      cruise_test=False):
+                      cruise_test=False, manual_regressor=None):
     """
     Perform XGBoost Regression on the given dataset.
 
@@ -172,9 +172,11 @@ def XGBoost_regressor(dataframe, xfeatures, yfeatures, cv=False,
     - cv (int or None): Number of cross-validation folds. If None,
         no cross-validation is performed.
     - cruise_test (bool or str): If bool, indicates whether to split the
-        data into
-        train and test sets randomly. If str, indicates the cruise name to use
-        as the test set.
+        data into train and test sets randomly. If str, indicates the cruise
+        name to use as the test set.
+    - manual_regressor (xgboost.XGBRegressor): Optional manual XGBoost
+        regressor object. If provided, this regressor will be used instead of
+        creating a new one.
 
     Returns:
     - xgb_regressor (xgboost.XGBRegressor): The trained XGBoost regressor.
@@ -190,11 +192,14 @@ def XGBoost_regressor(dataframe, xfeatures, yfeatures, cv=False,
     - y_train (pandas.Series): The true values of the target variable for the
         train dataset.
     """
-    if "Tu_label" in xfeatures:
+
+    if "Tu_label" not in dataframe.columns:
         hallo = Tu_label(dataframe.Tu)
         dataframe["Tu_label"] = hallo
 
         dataframe = encode_tulabel(dataframe)
+
+        dataframe, label = encode_tulabel(dataframe)
 
     if 'log_eps' not in dataframe.columns:
         dataframe['log_eps'] = dataframe['eps'].apply(lambda x: math.log(x))
@@ -224,13 +229,16 @@ def XGBoost_regressor(dataframe, xfeatures, yfeatures, cv=False,
                                                             test_size=0.2,
                                                             random_state=SEED)
 
-    # Create the XGBoost regressor
-    xgb_regressor = xgb.XGBRegressor(
-        max_depth=7,
-        n_estimators=300,
-        learning_rate=0.1,
-        random_state=SEED
-    )
+    if manual_regressor is None:
+        # Create the XGBoost regressor
+        xgb_regressor = xgb.XGBRegressor(
+            max_depth=7,
+            n_estimators=300,
+            learning_rate=0.1,
+            random_state=SEED
+        )
+    else:
+        xgb_regressor = manual_regressor
 
     # Fit the regressor on the training data
     xgb_regressor.fit(X_train, y_train)
@@ -242,11 +250,10 @@ def XGBoost_regressor(dataframe, xfeatures, yfeatures, cv=False,
     r2 = r2_score(y_test, y_pred)
 
     # Perform cross-validation if cv is not None
-    r2_cv = None
+    # cv = None
     if cv is not None:
         r2 = cross_val_score(xgb_regressor, X_train, y_train, cv=cv,
                              scoring='r2')
-
 
     # Plot feature importances
     feature_importances = xgb_regressor.feature_importances_
@@ -261,6 +268,7 @@ def XGBoost_regressor(dataframe, xfeatures, yfeatures, cv=False,
     plt.ylabel('Feature')
     plt.title('XGBoost Feature Importances')
     plt.show()
+
     return (xgb_regressor, r2, y_test, y_pred, X_test,
             feature_importances, X_train, y_train)
 
@@ -293,9 +301,10 @@ def XGBoost_regressor_tuned(dataframe, xfeatures, yfeatures):
     - y_train (numpy.ndarray): The true values of the target variable for the
         training dataset.
     """
-    if "Tu_label" in xfeatures:
-        encoded_Tu = Tu_label(dataframe.Tu)
-        dataframe["Tu_label"] = encoded_Tu
+    if "Tu_label" not in dataframe.columns:
+        hallo = Tu_label(dataframe.Tu)
+        dataframe["Tu_label"] = hallo
+
         dataframe = encode_tulabel(dataframe)
 
     if 'log_eps' not in dataframe.columns:
