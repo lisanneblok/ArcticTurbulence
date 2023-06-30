@@ -38,7 +38,7 @@ def select_variables(data, variables):
 
 
 def processing_functions(dataset, selected_columns, Hadi_SI, bathy_ds,
-                         arctic=False):
+                         arctic=False, ASBO=False):
     """
     Perform processing on the input dataset.
 
@@ -75,6 +75,8 @@ def processing_functions(dataset, selected_columns, Hadi_SI, bathy_ds,
         bathy_ds, arctic=True)
     """
     dataset = calc_N2_kappa_sorted(dataset)
+    # ABSO SIC values assigned manually
+    #  if ASBO is not False:
     dataset = calc_SIC(dataset, Hadi_SI)
     dataset = mld(dataset)
     if arctic is True:
