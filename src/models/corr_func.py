@@ -32,46 +32,28 @@ def calc_correlation(merged_df):
         variables and absolute residuals.
 
     Returns:
-        correlation_matrix (ndarray): Correlation matrix showing the
+        correlation_matrix (DataFrame): Correlation matrix showing the
         correlation coefficients.
 
     """
     merged_df["absolute_residuals"] = np.abs(
         merged_df["log_eps"] - merged_df["eps_pred"])
-    absolute_residuals = merged_df["absolute_residuals"].to_numpy()
-    # Extract the relevant variables from merged_df
-    depth = merged_df['depth']
-    latitude = merged_df['latitude']
-    longitude = merged_df['longitude']
-    tu_label = merged_df['Tu_label']
 
-    # Convert the other variables to numpy arrays
-    depth = np.array(depth)
-    latitude = np.array(latitude)
-    longitude = np.array(longitude)
-    tu_label = np.array(tu_label)
-
-    # Reshape the variables to have compatible dimensions
-    depth = depth.reshape(-1, 1)  # Reshape to have shape (n_samples, 1)
-    latitude = latitude.reshape(-1, 1)
-    longitude = longitude.reshape(-1, 1)
-    tu_label = tu_label.reshape(-1, 1)
-    absolute_residuals = absolute_residuals.reshape(-1, 1)
+    # Select the relevant columns from merged_df
+    variables = ['depth', 'latitude', 'longitude',
+                 'Tu_x', 'absolute_residuals']
+    data = merged_df[variables]
 
     # Calculate correlation coefficients
-    correlation_matrix = np.corrcoef(data, rowvar=False)
+    correlation_matrix = data.corr()
 
     # Extract the correlations with absolute residuals
-    correlation_depth = correlation_matrix[-1, 0]
-    correlation_latitude = correlation_matrix[-1, 1]
-    correlation_longitude = correlation_matrix[-1, 2]
-    correlation_tu_label = correlation_matrix[-1, 3]
+    correlation_with_residuals = correlation_matrix[
+        'absolute_residuals'][:-1]
 
     print("Correlation with Absolute Residuals:")
-    print("Depth:", correlation_depth)
-    print("Latitude:", correlation_latitude)
-    print("Longitude:", correlation_longitude)
-    print("Tu Label:", correlation_tu_label)
+    print(correlation_with_residuals)
+
     return correlation_matrix
 
 
