@@ -2,6 +2,8 @@
 
 _Lisanne Blok_, AI4ER student at AI4ER, University of Cambridge.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](https://opensource.org/licenses/MIT)
+
 ## Running the model:
 - Find model under models/XGBoost or RandomForest
 - Run notebooks/visualisation/plot_predictions.ipynb
