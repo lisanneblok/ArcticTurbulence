@@ -9,7 +9,7 @@ import tqdm
 
 from src.features.processing_func import mld
 from src.features.processing_func import calc_hab, arctic_calchab
-from src.features.processing_func import mld, calc_N2_kappa_sorted
+from src.features.processing_func import mld, calc_N2_kappa_sorted, seasonal_sin
 from src.features.calc_seaice import calc_SIC
 from src.utils.directories import get_parent_directory
 
@@ -79,6 +79,7 @@ def processing_functions(dataset, selected_columns, Hadi_SI, bathy_ds,
     #  if ASBO is not False:
     dataset = calc_SIC(dataset, Hadi_SI)
     dataset = mld(dataset)
+    dataset = seasonal_sin(dataset)
     if arctic is True:
         dataset = arctic_calchab(dataset, bathy_ds)
     else:

@@ -292,6 +292,7 @@ def calc_N2_kappa_sorted(dataset):
 
     dataset["log_N2"] = np.log10(dataset.N2_sort)
     dataset["log_kappa"] = np.log10(dataset.kappa)
+    
     # Perform column check and calculation
     if "log_eps" not in dataset:
         dataset["log_eps"] = np.log10(dataset["eps"])
@@ -450,4 +451,37 @@ def mld(dataset, outfile=False, save_mld=False, threshold=0.01):
 
     # Combine MLD_dataset with the original dataset
     dataset.update(MLD_dataset)
+    return dataset
+
+
+def seasonal_sin(dataset, time_var='time', profile_var='profile'):
+    """
+    Add a seasonal sine feature to a NetCDF dataset.
+
+    Parameters:
+        dataset (xarray.Dataset): Input NetCDF dataset.
+        time_var (str): Name of the datetime variable in the dataset.
+        profile_var (str): Name of the profile variable in the dataset.
+
+    Returns:
+        xarray.Dataset: Updated dataset with the seasonal sine feature added.
+    """
+
+    # Extract the datetime array
+    datetime_array = pd.to_datetime(dataset[time_var].values)
+
+    # Extract the month and day from the datetime array
+    months = datetime_array.month
+    days = datetime_array.day
+
+    # Convert month and day to radians
+    month_radians = 2 * np.pi * (months - 1) / 12
+    day_radians = 2 * np.pi * (days - 1) / 31
+
+    # Create seasonal sine
+    seasonal_feature_sin = np.sin(month_radians + day_radians)
+
+    # Add the seasonal feature to the dataset
+    dataset['seasonal_sin'] = (profile_var, seasonal_feature_sin)
+
     return dataset
