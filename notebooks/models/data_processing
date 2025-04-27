@@ -1,0 +1,73 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+
+# Function to subsample every 10 meters
+def subsample(group):
+    # Round depth to nearest 10 meters
+    group = group.copy()
+    group['depth_rounded'] = (group['depth'] / 10).round() * 10
+    # Drop duplicates on the rounded depth
+    return group.drop_duplicates(subset='depth_rounded')
+
+
+def process_dataframe():
+    # Set random seed for reproducibility
+    SEED = 42
+
+    # Load in data to a pandas dataframe
+    df = pd.read_pickle('/Users/lb962/Documents/GitHub/ArcticTurbulence/data/ml_ready/merged_arctic.pkl')
+    df.reset_index(drop=True, inplace=True)
+
+    # First, group by 'profile' and 'cruise'
+    grouped = df.groupby(['profile', 'cruise'])
+
+    # Apply subsampling to each group
+    df = grouped.apply(subsample).reset_index(drop=True)
+
+    # Define the list of features and target variable
+    xstringlist = ['S', 'T', 'latitude', 'dSdz', 'dTdz', 'log_N2']
+    ystringlist = ['log_eps']
+
+    # Get the unique profiles
+    profiles = df['profile'].unique()
+
+    # Split profiles into train and temp (test + val)
+    profiles_train, profiles_temp = train_test_split(
+        profiles, test_size=0.4, random_state=SEED)
+
+    # Split temp into validation and test
+    profiles_val, profiles_test = train_test_split(
+        profiles_temp, test_size=0.5, random_state=SEED)
+
+    # Select rows where profile is in the corresponding set
+    train_df = df[df['profile'].isin(profiles_train)]
+    val_df = df[df['profile'].isin(profiles_val)]
+    test_df = df[df['profile'].isin(profiles_test)]
+
+    # Select x and y
+    X_train = train_df[xstringlist]
+    y_train = train_df[ystringlist]
+
+    X_val = val_df[xstringlist]
+    y_val = val_df[ystringlist]
+
+    X_test = test_df[xstringlist]
+    y_test = test_df[ystringlist]
+
+    # Scale features to [0,1] range using MinMaxScaler
+    scaler_range = MinMaxScaler()
+    scaler_range.fit(X_train)
+    df_train_scaled_range = pd.DataFrame(scaler_range.transform(X_train))
+    df_val_scaled_range = pd.DataFrame(scaler_range.transform(X_val))
+    df_test_scaled_range = pd.DataFrame(scaler_range.transform(X_test))
+
+    # Optional: Print out the first few rows of the scaled training set for verification
+    print("Scaled training data sample:")
+    print(df_train_scaled_range.head())
+
+    return df_train_scaled_range, df_val_scaled_range, df_test_scaled_range, y_train, y_val, y_test
+
+
+if __name__ == "__main__":
+    process_dataframe()
