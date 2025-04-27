@@ -6,7 +6,7 @@ _Lisanne Blok_, AI4ER student at AI4ER, University of Cambridge.
 
 ## Running the model:
 - Find model under models/XGBoost or RandomForest
-- Run notebooks/visualisation/plot_predictions.ipynb
+- Run notebooks/models/mlp_model.py or notebooks/models/MLP_model.ipynb
 
 ### Abstract
 This project explores whether Arctic ocean turbulence, specifically ε, the dissipation rate of
