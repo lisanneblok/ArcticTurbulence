@@ -35,7 +35,8 @@ def train_and_evaluate_mlp(X_train, y_train, X_test, y_test, X_val, y_val, qt,
         dict: Model evaluation metrics (R², MSE, MAE) and learning rate curve.
     """
 
-    # MLP hyperparameters
+    # initial guesses of hyperparameters
+    # leave empty if using standard ones defined in function
     activ = 'tanh'
     opt = 'adam'
     pat = 30
@@ -46,7 +47,7 @@ def train_and_evaluate_mlp(X_train, y_train, X_test, y_test, X_val, y_val, qt,
     n_units2 = 35
     batch_size = 16
     
-    # Train MLPRegressor
+    # use MLPRegressor as simple baseline model
     regr = MLPRegressor(hidden_layer_sizes=(n_units1, n_units2),
                         activation=activ,
                         solver=opt,
@@ -59,13 +60,13 @@ def train_and_evaluate_mlp(X_train, y_train, X_test, y_test, X_val, y_val, qt,
                         warm_start=True,
                         verbose=False)
 
-    # Fit model and keep track of learning curves (loss history)
+    # Fit model and keep track of learning curves
     loss_curve = []
     for epoch in range(n_epochs):
         regr.fit(X_train, y_train)
         loss_curve.append(regr.loss_)
         
-        # Early stopping if the loss curve does not improve
+        # Early stopping
         if len(loss_curve) > pat and loss_curve[-1] >= min(loss_curve[-pat-1:]):
             break
     
@@ -73,10 +74,10 @@ def train_and_evaluate_mlp(X_train, y_train, X_test, y_test, X_val, y_val, qt,
     y_pred_transformed = regr.predict(X_test)
     y_pred_transformed = y_pred_transformed.reshape(-1, 1)
 
-    # Inverse transform predictions to original log_eps space
+    # back to original log_eps space
     y_pred = pd.DataFrame(qt.inverse_transform(y_pred_transformed), columns=['log_eps'])
 
-    # Evaluate
+    # performance metrics
     u = ((y_test.flatten() - y_pred['log_eps'].flatten()) ** 2).sum()
     v = ((y_test.flatten() - y_test.flatten().mean()) ** 2).sum()
     r2_score = 1 - (u/v)
@@ -84,7 +85,7 @@ def train_and_evaluate_mlp(X_train, y_train, X_test, y_test, X_val, y_val, qt,
     mse = mean_squared_error(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
     
-    # Plot learning rate curve (loss curve)
+    # Plot loss curve
     plt.figure(figsize=(8, 6))
     plt.plot(loss_curve, label='Loss Curve')
     plt.xlabel('Epochs')
@@ -93,7 +94,6 @@ def train_and_evaluate_mlp(X_train, y_train, X_test, y_test, X_val, y_val, qt,
     plt.legend()
     plt.show()
     
-    # Return evaluation metrics and the learning curve
     return {
         "R²": r2_score,
         "MSE": mse,

@@ -1,6 +1,8 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import QuantileTransformer
+
 
 # Function to subsample every 10 meters
 def subsample(group):
@@ -12,17 +14,15 @@ def subsample(group):
 
 
 def process_dataframe():
-    # Set random seed for reproducibility
     SEED = 42
 
-    # Load in data to a pandas dataframe
     df = pd.read_pickle('/Users/lb962/Documents/GitHub/ArcticTurbulence/data/ml_ready/merged_arctic.pkl')
     df.reset_index(drop=True, inplace=True)
 
-    # First, group by 'profile' and 'cruise'
+    # group by 'profile' and 'cruise'
     grouped = df.groupby(['profile', 'cruise'])
 
-    # Apply subsampling to each group
+    # deal with class imbalance by subsampling
     df = grouped.apply(subsample).reset_index(drop=True)
 
     # Define the list of features and target variable
@@ -32,11 +32,10 @@ def process_dataframe():
     # Get the unique profiles
     profiles = df['profile'].unique()
 
-    # Split profiles into train and temp (test + val)
+    # Split by profiles
     profiles_train, profiles_temp = train_test_split(
         profiles, test_size=0.4, random_state=SEED)
 
-    # Split temp into validation and test
     profiles_val, profiles_test = train_test_split(
         profiles_temp, test_size=0.5, random_state=SEED)
 
@@ -45,7 +44,7 @@ def process_dataframe():
     val_df = df[df['profile'].isin(profiles_val)]
     test_df = df[df['profile'].isin(profiles_test)]
 
-    # Select x and y
+    # select target and predictor features
     X_train = train_df[xstringlist]
     y_train = train_df[ystringlist]
 
@@ -55,18 +54,19 @@ def process_dataframe():
     X_test = test_df[xstringlist]
     y_test = test_df[ystringlist]
 
-    # Scale features to [0,1] range using MinMaxScaler
     scaler_range = MinMaxScaler()
     scaler_range.fit(X_train)
     df_train_scaled_range = pd.DataFrame(scaler_range.transform(X_train))
     df_val_scaled_range = pd.DataFrame(scaler_range.transform(X_val))
     df_test_scaled_range = pd.DataFrame(scaler_range.transform(X_test))
 
-    # Optional: Print out the first few rows of the scaled training set for verification
-    print("Scaled training data sample:")
-    print(df_train_scaled_range.head())
+    # Target transformation to deal with class imbalance
+    qt = QuantileTransformer(output_distribution='normal', random_state=SEED)
+    y_train_transformed = qt.fit_transform(y_train)
+    y_val_transformed = qt.transform(y_val)
+    y_test_transformed = qt.transform(y_test)
 
-    return df_train_scaled_range, df_val_scaled_range, df_test_scaled_range, y_train, y_val, y_test
+    return df_train_scaled_range, df_val_scaled_range, df_test_scaled_range, y_train_transformed, y_val_transformed, y_test_transformed
 
 
 if __name__ == "__main__":
